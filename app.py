@@ -5,178 +5,101 @@ import os
 import requests
 import numpy as np
 
-st.set_page_config(
-    page_title="Deteksi Helm Proyek",
-    page_icon="🛡️",
-    layout="wide"
-)
+# Konfigurasi Halaman
+st.set_page_config(page_title="Deteksi Helm Proyek", page_icon="🛡️", layout="wide")
 
 MODEL_CONFIG = {
-    "YoloV8": {
-        "filename": "best8.pt",
-        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best8.pt",
-    },
-    "YoloV11": {
-        "filename": "best11.pt",
-        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best11.pt",
-    },
-    "YoloV12": {
-        "filename": "best12.pt",
-        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best12.pt",
-    },
+    "YoloV8": {"filename": "best8.pt", "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best8.pt"},
+    "YoloV11": {"filename": "best11.pt", "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best11.pt"},
+    "YoloV12": {"filename": "best12.pt", "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best12.pt"},
 }
 
-def download_model(name: str, config: dict):
-    path = config["filename"]
-    if not os.path.exists(path):
-        with st.spinner(f"Mengunduh {name}..."):
-            r = requests.get(config["url"], stream=True)
-            r.raise_for_status()
-            with open(path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-        st.success(f"{name} berhasil diunduh!")
+# 1. Perbaikan: Pindahkan fungsi download ke luar agar dipanggil saat aplikasi mulai
+def ensure_models_downloaded():
+    for name, config in MODEL_CONFIG.items():
+        if not os.path.exists(config["filename"]):
+            with st.spinner(f"Mengunduh {name} (hanya dilakukan sekali)..."):
+                try:
+                    r = requests.get(config["url"], stream=True)
+                    r.raise_for_status()
+                    with open(config["filename"], "wb") as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                except Exception as e:
+                    st.error(f"Gagal mengunduh {name}: {e}")
+
+# Panggil saat app dimuat
+ensure_models_downloaded()
 
 @st.cache_resource
 def load_model(path: str):
-    try:
-        return YOLO(path)
-    except Exception as e:
-        if os.path.exists(path):
-            os.remove(path)
-        st.error(f"Error memuat model: {e}. File mungkin korup, silakan coba lagi.")
-        return None
+    return YOLO(path)
 
 def run_detection(model, image: Image.Image):
-    results   = model.predict(image, classes=[0, 1], conf=0.25)
-    plotted   = results[0].plot()
-    plotted   = plotted[:, :, ::-1]  
+    # Menggunakan persist=True untuk efisiensi jika ada stream
+    results = model.predict(image, classes=[0, 1], conf=0.25, verbose=False)
+    plotted = results[0].plot()[:, :, ::-1]  
 
-    boxes     = results[0].boxes
+    boxes = results[0].boxes
     conf_list = boxes.conf.tolist() if boxes is not None else []
-    n_det     = len(conf_list)
-    avg_conf  = float(np.mean(conf_list)) * 100 if conf_list else 0.0
-
-    class_ids   = boxes.cls.tolist() if boxes is not None else []
-    class_names = results[0].names
-    labels      = [class_names[int(c)] for c in class_ids]
+    n_det = len(conf_list)
+    avg_conf = float(np.mean(conf_list)) * 100 if conf_list else 0.0
 
     return {
-        "image"   : plotted,
-        "n_det"   : n_det,
+        "image": plotted,
+        "n_det": n_det,
         "avg_conf": avg_conf,
-        "labels"  : labels,
+        "labels": [results[0].names[int(c)] for c in boxes.cls.tolist()] if boxes is not None else []
     }
 
 def score_model(result: dict) -> float:
-    return result["avg_conf"] * (1 + result["n_det"] * 0.05)
+    # Sedikit penyesuaian bobot agar lebih seimbang
+    return result["avg_conf"] + (result["n_det"] * 2.0)
 
+# --- UI ---
 st.title("🛡️ Deteksi Hard Hat & Head")
-st.caption("Upload gambar dan pilih model untuk mendeteksi pemakaian helm pekerja.")
-st.divider()
+st.caption("Upload gambar untuk mendeteksi pemakaian helm pekerja.")
 
-all_model_names = list(MODEL_CONFIG.keys())
-max_models      = len(all_model_names)
+# Langkah 1 & 2 disederhanakan agar lebih intuitif
+col_config1, col_config2 = st.columns(2)
+with col_config1:
+    num_models = st.radio("Jumlah model perbandingan:", [1, 2, 3], horizontal=True)
 
-# ── Pilih jumlah model ──────────────────
-st.subheader("Langkah 1 – Pilih jumlah model")
+with col_config2:
+    if num_models == 1:
+        selected_names = [st.selectbox("Pilih model:", list(MODEL_CONFIG.keys()))]
+    elif num_models == 2:
+        m1 = st.selectbox("Model 1:", list(MODEL_CONFIG.keys()), index=0)
+        remaining = [m for m in MODEL_CONFIG.keys() if m != m1]
+        m2 = st.selectbox("Model 2:", remaining)
+        selected_names = [m1, m2]
+    else:
+        selected_names = list(MODEL_CONFIG.keys())
+        st.write("Menggunakan semua model (V8, V11, V12)")
 
-if max_models == 1:
-    st.info("ℹ️ Saat ini hanya tersedia 1 model. Tambahkan `best2.pt` dan `best3.pt` ke repo untuk mengaktifkan perbandingan.")
-    num_models = 1
-else:
-    num_options = list(range(1, max_models + 1))
-    num_models  = st.radio(
-        "Berapa model yang ingin digunakan?",
-        options=num_options,
-        format_func=lambda x: f"{x} model",
-        horizontal=True,
-    )
-
-# ── Pilih model mana ────────────────────
-st.subheader("Langkah 2 – Pilih model")
-
-if num_models == 1:
-    selected_names = [st.selectbox("Pilih satu model:", all_model_names)]
-elif num_models == 2:
-    col_a, col_b = st.columns(2)
-    with col_a:
-        m1 = st.selectbox("Model pertama:", all_model_names, index=0, key="m1")
-    with col_b:
-        remaining = [m for m in all_model_names if m != m1]
-        m2 = st.selectbox("Model kedua:", remaining, key="m2")
-    selected_names = [m1, m2]
-else:
-    selected_names = all_model_names
-    st.info("Semua model akan dijalankan bersamaan.")
-
-st.subheader("Langkah 3 – Upload gambar")
-uploaded_file = st.file_uploader(
-    "Pilih gambar (JPG / JPEG / PNG):",
-    type=["jpg", "jpeg", "png"],
-)
+uploaded_file = st.file_uploader("Upload gambar (JPG/PNG):", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Gambar yang diunggah", use_column_width=False, width=480)
-
     if st.button("Mulai Deteksi", type="primary"):
-            models = {}
-            with st.spinner("Memuat model..."):
-                for name in selected_names:
-                    cfg = MODEL_CONFIG[name]
-                    # Langsung panggil load_model karena file sudah ada di folder
-                    models[name] = load_model(cfg["filename"]) 
-            
-            results = {}
-            with st.spinner("Memproses gambar..."):
-                for name, mdl in models.items():
-                    results[name] = run_detection(mdl, image)
+        results = {}
+        for name in selected_names:
+            with st.spinner(f"Menjalankan {name}..."):
+                model = load_model(MODEL_CONFIG[name]["filename"])
+                results[name] = run_detection(model, image)
         
-        # ... sisa kode untuk menampilkan hasil ...
         st.divider()
         st.subheader("📊 Hasil Deteksi")
-
-        if num_models == 1:
-            name = selected_names[0]
-            res  = results[name]
-            st.markdown(f"#### {name}")
-            st.image(res["image"], caption="Hasil Deteksi", use_column_width=True)
-            c1, c2 = st.columns(2)
-            c1.metric("Jumlah Deteksi", res["n_det"])
-            c2.metric("Rata-rata Confidence", f"{res['avg_conf']:.1f}%")
-
-        else:
-            scores    = {name: score_model(results[name]) for name in selected_names}
-            best_name = max(scores, key=scores.get)
-            cols      = st.columns(len(selected_names))
-
-            for col, name in zip(cols, selected_names):
-                res     = results[name]
+        
+        # Tampilan Grid untuk perbandingan
+        cols = st.columns(len(selected_names))
+        scores = {name: score_model(res) for name, res in results.items()}
+        best_name = max(scores, key=scores.get)
+        
+        for col, name in zip(cols, selected_names):
+            with col:
                 is_best = (name == best_name)
-                with col:
-                    badge = " 🏆 **Terbaik!**" if is_best else ""
-                    st.markdown(f"##### {name}{badge}")
-                    st.image(res["image"], use_column_width=True)
-
-                    c1, c2 = st.columns(2)
-                    c1.metric("Deteksi", res["n_det"])
-                    c2.metric("Conf (%)", f"{res['avg_conf']:.1f}")
-
-                    if res["labels"]:
-                        st.caption("Label: " + ", ".join(set(res["labels"])))
-                    else:
-                        st.caption("Tidak ada objek terdeteksi.")
-
-                    if is_best:
-                        st.success("Model ini menghasilkan deteksi terbaik.")
-
-            st.divider()
-            best_res = results[best_name]
-            st.markdown(
-                f"### 🏆 Model Terbaik: **{best_name}**\n"
-                f"Confidence rata-rata **{best_res['avg_conf']:.1f}%** "
-                f"dengan **{best_res['n_det']}** objek terdeteksi."
-            )
-
-        st.success("✅ Deteksi selesai!")
+                st.markdown(f"**{name}** {'🏆' if is_best else ''}")
+                st.image(results[name]["image"], use_column_width=True)
+                st.metric("Deteksi", results[name]["n_det"])
+                st.metric("Confidence", f"{results[name]['avg_conf']:.1f}%")
