@@ -120,18 +120,20 @@ if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Gambar yang diunggah", use_column_width=False, width=480)
 
-    if st.button(" Mulai Deteksi", type="primary"):
-        models = {}
-        for name in selected_names:
-            cfg = MODEL_CONFIG[name]
-            download_model(name, cfg)
-            models[name] = load_model(cfg["filename"])
-
-        results = {}
-        with st.spinner("Memproses gambar..."):
-            for name, mdl in models.items():
-                results[name] = run_detection(mdl, image)
-
+    if st.button("Mulai Deteksi", type="primary"):
+            models = {}
+            with st.spinner("Memuat model..."):
+                for name in selected_names:
+                    cfg = MODEL_CONFIG[name]
+                    # Langsung panggil load_model karena file sudah ada di folder
+                    models[name] = load_model(cfg["filename"]) 
+            
+            results = {}
+            with st.spinner("Memproses gambar..."):
+                for name, mdl in models.items():
+                    results[name] = run_detection(mdl, image)
+        
+        # ... sisa kode untuk menampilkan hasil ...
         st.divider()
         st.subheader("📊 Hasil Deteksi")
 
