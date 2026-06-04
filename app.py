@@ -39,7 +39,13 @@ def download_model(name: str, config: dict):
 
 @st.cache_resource
 def load_model(path: str):
-    return YOLO(path)
+    try:
+        return YOLO(path)
+    except Exception as e:
+        if os.path.exists(path):
+            os.remove(path)
+        st.error(f"Error memuat model: {e}. File mungkin korup, silakan coba lagi.")
+        return None
 
 def run_detection(model, image: Image.Image):
     results   = model.predict(image, classes=[0, 1], conf=0.25)
