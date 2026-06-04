@@ -5,7 +5,6 @@ import os
 import requests
 import numpy as np
 
-# Konfigurasi Halaman
 st.set_page_config(page_title="Deteksi Helm Proyek", page_icon="🛡️", layout="wide")
 
 MODEL_CONFIG = {
@@ -14,7 +13,6 @@ MODEL_CONFIG = {
     "YoloV12": {"filename": "best12.pt", "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best12.pt"},
 }
 
-# 1. Perbaikan: Pindahkan fungsi download ke luar agar dipanggil saat aplikasi mulai
 def ensure_models_downloaded():
     for name, config in MODEL_CONFIG.items():
         if not os.path.exists(config["filename"]):
@@ -28,7 +26,6 @@ def ensure_models_downloaded():
                 except Exception as e:
                     st.error(f"Gagal mengunduh {name}: {e}")
 
-# Panggil saat app dimuat
 ensure_models_downloaded()
 
 @st.cache_resource
@@ -36,7 +33,6 @@ def load_model(path: str):
     return YOLO(path)
 
 def run_detection(model, image: Image.Image):
-    # Menggunakan persist=True untuk efisiensi jika ada stream
     results = model.predict(image, classes=[0, 1], conf=0.25, verbose=False)
     plotted = results[0].plot()[:, :, ::-1]  
 
@@ -53,14 +49,11 @@ def run_detection(model, image: Image.Image):
     }
 
 def score_model(result: dict) -> float:
-    # Sedikit penyesuaian bobot agar lebih seimbang
     return result["avg_conf"] + (result["n_det"] * 2.0)
 
-# --- UI ---
 st.title("🛡️ Deteksi Hard Hat & Head")
 st.caption("Upload gambar untuk mendeteksi pemakaian helm pekerja.")
 
-# Langkah 1 & 2 disederhanakan agar lebih intuitif
 col_config1, col_config2 = st.columns(2)
 with col_config1:
     num_models = st.radio("Jumlah model perbandingan:", [1, 2, 3], horizontal=True)
@@ -91,7 +84,6 @@ if uploaded_file:
         st.divider()
         st.subheader("📊 Hasil Deteksi")
         
-        # Tampilan Grid untuk perbandingan
         cols = st.columns(len(selected_names))
         scores = {name: score_model(res) for name, res in results.items()}
         best_name = max(scores, key=scores.get)
