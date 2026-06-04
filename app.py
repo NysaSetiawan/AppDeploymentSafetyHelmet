@@ -5,68 +5,46 @@ import os
 import requests
 import numpy as np
 
-# ─────────────────────────────────────────
-# 1. Konfigurasi Halaman
-# ─────────────────────────────────────────
 st.set_page_config(
     page_title="Deteksi Helm Proyek",
     page_icon="🛡️",
     layout="wide"
 )
 
-# ─────────────────────────────────────────
-# 2. Konfigurasi Model
-#    Saat ini repo hanya berisi 1 file best.pt
-#    Tambahkan best2.pt / best3.pt ke repo untuk
-#    mengaktifkan perbandingan multi-model
-# ─────────────────────────────────────────
 MODEL_CONFIG = {
-    "Model 1 – best.pt": {
-        "filename": "best.pt",
-        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best.pt",
-        "description": "Model utama",
+    "YoloV8": {
+        "filename": "best8.pt",
+        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best8.pt",
     },
-    # Uncomment & tambahkan file ke repo untuk model ke-2 dan ke-3:
-    # "Model 2 – best2.pt": {
-    #     "filename": "best2.pt",
-    #     "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best2.pt",
-    #     "description": "Model kedua",
-    # },
-    # "Model 3 – best3.pt": {
-    #     "filename": "best3.pt",
-    #     "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best3.pt",
-    #     "description": "Model ketiga",
-    # },
+    "YoloV11": {
+        "filename": "best11.pt",
+        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best11.pt",
+    },
+    "YoloV12": {
+        "filename": "best12.pt",
+        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best12.pt",
+    },
 }
 
-# ─────────────────────────────────────────
-# 3. Fungsi Download Model
-# ─────────────────────────────────────────
 def download_model(name: str, config: dict):
     path = config["filename"]
     if not os.path.exists(path):
-        with st.spinner(f"⏬ Mengunduh {name}..."):
+        with st.spinner(f"Mengunduh {name}..."):
             r = requests.get(config["url"], stream=True)
             r.raise_for_status()
             with open(path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
-        st.success(f"✅ {name} berhasil diunduh!")
+        st.success(f"{name} berhasil diunduh!")
 
-# ─────────────────────────────────────────
-# 4. Load Model (di-cache agar tidak reload)
-# ─────────────────────────────────────────
 @st.cache_resource
 def load_model(path: str):
     return YOLO(path)
 
-# ─────────────────────────────────────────
-# 5. Fungsi Deteksi & Hitung Skor
-# ─────────────────────────────────────────
 def run_detection(model, image: Image.Image):
     results   = model.predict(image, classes=[0, 1], conf=0.25)
     plotted   = results[0].plot()
-    plotted   = plotted[:, :, ::-1]  # BGR → RGB
+    plotted   = plotted[:, :, ::-1]  
 
     boxes     = results[0].boxes
     conf_list = boxes.conf.tolist() if boxes is not None else []
@@ -87,9 +65,6 @@ def run_detection(model, image: Image.Image):
 def score_model(result: dict) -> float:
     return result["avg_conf"] * (1 + result["n_det"] * 0.05)
 
-# ─────────────────────────────────────────
-# 6. Tampilan Utama
-# ─────────────────────────────────────────
 st.title("🛡️ Deteksi Hard Hat & Head")
 st.caption("Upload gambar dan pilih model untuk mendeteksi pemakaian helm pekerja.")
 st.divider()
@@ -129,7 +104,6 @@ else:
     selected_names = all_model_names
     st.info("Semua model akan dijalankan bersamaan.")
 
-# ── Upload Gambar ───────────────────────
 st.subheader("Langkah 3 – Upload gambar")
 uploaded_file = st.file_uploader(
     "Pilih gambar (JPG / JPEG / PNG):",
@@ -140,15 +114,13 @@ if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Gambar yang diunggah", use_column_width=False, width=480)
 
-    if st.button("🚀 Mulai Deteksi", type="primary"):
-        # Download & load model yang dipilih
+    if st.button(" Mulai Deteksi", type="primary"):
         models = {}
         for name in selected_names:
             cfg = MODEL_CONFIG[name]
             download_model(name, cfg)
             models[name] = load_model(cfg["filename"])
 
-        # Jalankan deteksi
         results = {}
         with st.spinner("Memproses gambar..."):
             for name, mdl in models.items():
