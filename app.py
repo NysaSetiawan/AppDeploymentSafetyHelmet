@@ -16,24 +16,27 @@ st.set_page_config(
 
 # ─────────────────────────────────────────
 # 2. Konfigurasi Model
-#    Ganti nama & URL sesuai file best.pt Anda
+#    Saat ini repo hanya berisi 1 file best.pt
+#    Tambahkan best2.pt / best3.pt ke repo untuk
+#    mengaktifkan perbandingan multi-model
 # ─────────────────────────────────────────
 MODEL_CONFIG = {
-    "Model 1 – YOLOv8n": {
-        "filename": "best1.pt",
-        "url": "URL_DOWNLOAD_MODEL_1",      # ← Ganti dengan URL publik Anda
-        "description": "Ringan & cepat",
+    "Model 1 – best.pt": {
+        "filename": "best.pt",
+        "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best.pt",
+        "description": "Model utama",
     },
-    "Model 2 – YOLOv8s": {
-        "filename": "best2.pt",
-        "url": "URL_DOWNLOAD_MODEL_2",      # ← Ganti dengan URL publik Anda
-        "description": "Seimbang",
-    },
-    "Model 3 – YOLOv8m": {
-        "filename": "best3.pt",
-        "url": "URL_DOWNLOAD_MODEL_3",      # ← Ganti dengan URL publik Anda
-        "description": "Akurasi tinggi",
-    },
+    # Uncomment & tambahkan file ke repo untuk model ke-2 dan ke-3:
+    # "Model 2 – best2.pt": {
+    #     "filename": "best2.pt",
+    #     "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best2.pt",
+    #     "description": "Model kedua",
+    # },
+    # "Model 3 – best3.pt": {
+    #     "filename": "best3.pt",
+    #     "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best3.pt",
+    #     "description": "Model ketiga",
+    # },
 }
 
 # ─────────────────────────────────────────
@@ -61,16 +64,15 @@ def load_model(path: str):
 # 5. Fungsi Deteksi & Hitung Skor
 # ─────────────────────────────────────────
 def run_detection(model, image: Image.Image):
-    results = model.predict(image, classes=[0, 1], conf=0.25)
-    plotted  = results[0].plot()           # numpy array BGR
-    plotted  = plotted[:, :, ::-1]         # BGR → RGB
+    results   = model.predict(image, classes=[0, 1], conf=0.25)
+    plotted   = results[0].plot()
+    plotted   = plotted[:, :, ::-1]  # BGR → RGB
 
-    boxes      = results[0].boxes
-    conf_list  = boxes.conf.tolist() if boxes is not None else []
-    n_det      = len(conf_list)
-    avg_conf   = float(np.mean(conf_list)) * 100 if conf_list else 0.0
+    boxes     = results[0].boxes
+    conf_list = boxes.conf.tolist() if boxes is not None else []
+    n_det     = len(conf_list)
+    avg_conf  = float(np.mean(conf_list)) * 100 if conf_list else 0.0
 
-    # Label per kelas
     class_ids   = boxes.cls.tolist() if boxes is not None else []
     class_names = results[0].names
     labels      = [class_names[int(c)] for c in class_ids]
@@ -83,7 +85,6 @@ def run_detection(model, image: Image.Image):
     }
 
 def score_model(result: dict) -> float:
-    """Skor sederhana: rata-rata confidence × jumlah deteksi (bisa dikustomisasi)."""
     return result["avg_conf"] * (1 + result["n_det"] * 0.05)
 
 # ─────────────────────────────────────────
@@ -91,19 +92,25 @@ def score_model(result: dict) -> float:
 # ─────────────────────────────────────────
 st.title("🛡️ Deteksi Hard Hat & Head")
 st.caption("Upload gambar dan pilih model untuk mendeteksi pemakaian helm pekerja.")
-
 st.divider()
+
+all_model_names = list(MODEL_CONFIG.keys())
+max_models      = len(all_model_names)
 
 # ── Pilih jumlah model ──────────────────
 st.subheader("Langkah 1 – Pilih jumlah model")
-num_models = st.radio(
-    "Berapa model yang ingin digunakan?",
-    options=[1, 2, 3],
-    format_func=lambda x: f"{'Satu' if x==1 else 'Dua' if x==2 else 'Tiga'} model ({x})",
-    horizontal=True,
-)
 
-all_model_names = list(MODEL_CONFIG.keys())
+if max_models == 1:
+    st.info("ℹ️ Saat ini hanya tersedia 1 model. Tambahkan `best2.pt` dan `best3.pt` ke repo untuk mengaktifkan perbandingan.")
+    num_models = 1
+else:
+    num_options = list(range(1, max_models + 1))
+    num_models  = st.radio(
+        "Berapa model yang ingin digunakan?",
+        options=num_options,
+        format_func=lambda x: f"{x} model",
+        horizontal=True,
+    )
 
 # ── Pilih model mana ────────────────────
 st.subheader("Langkah 2 – Pilih model")
@@ -118,9 +125,9 @@ elif num_models == 2:
         remaining = [m for m in all_model_names if m != m1]
         m2 = st.selectbox("Model kedua:", remaining, key="m2")
     selected_names = [m1, m2]
-else:  # 3 model
-    selected_names = all_model_names  # langsung pakai ketiganya
-    st.info("Semua tiga model akan dijalankan bersamaan.")
+else:
+    selected_names = all_model_names
+    st.info("Semua model akan dijalankan bersamaan.")
 
 # ── Upload Gambar ───────────────────────
 st.subheader("Langkah 3 – Upload gambar")
@@ -134,7 +141,7 @@ if uploaded_file:
     st.image(image, caption="Gambar yang diunggah", use_column_width=False, width=480)
 
     if st.button("🚀 Mulai Deteksi", type="primary"):
-        # Download & load semua model yang dipilih
+        # Download & load model yang dipilih
         models = {}
         for name in selected_names:
             cfg = MODEL_CONFIG[name]
@@ -150,52 +157,46 @@ if uploaded_file:
         st.divider()
         st.subheader("📊 Hasil Deteksi")
 
-        # ── Tampilan: 1 model ───────────────────
         if num_models == 1:
-            name   = selected_names[0]
-            res    = results[name]
+            name = selected_names[0]
+            res  = results[name]
             st.markdown(f"#### {name}")
             st.image(res["image"], caption="Hasil Deteksi", use_column_width=True)
-            st.metric("Jumlah Deteksi", res["n_det"])
-            st.metric("Rata-rata Confidence", f"{res['avg_conf']:.1f}%")
+            c1, c2 = st.columns(2)
+            c1.metric("Jumlah Deteksi", res["n_det"])
+            c2.metric("Rata-rata Confidence", f"{res['avg_conf']:.1f}%")
 
-        # ── Tampilan: 2 atau 3 model (side-by-side) ─
         else:
-            cols = st.columns(len(selected_names))
-            scores = {name: score_model(results[name]) for name in selected_names}
+            scores    = {name: score_model(results[name]) for name in selected_names}
             best_name = max(scores, key=scores.get)
+            cols      = st.columns(len(selected_names))
 
             for col, name in zip(cols, selected_names):
-                res = results[name]
+                res     = results[name]
                 is_best = (name == best_name)
                 with col:
                     badge = " 🏆 **Terbaik!**" if is_best else ""
                     st.markdown(f"##### {name}{badge}")
                     st.image(res["image"], use_column_width=True)
 
-                    # Metrik ringkas
                     c1, c2 = st.columns(2)
                     c1.metric("Deteksi", res["n_det"])
                     c2.metric("Conf (%)", f"{res['avg_conf']:.1f}")
 
-                    # Label yang terdeteksi
                     if res["labels"]:
-                        unique_labels = set(res["labels"])
-                        st.caption("Label: " + ", ".join(unique_labels))
+                        st.caption("Label: " + ", ".join(set(res["labels"])))
                     else:
                         st.caption("Tidak ada objek terdeteksi.")
 
                     if is_best:
                         st.success("Model ini menghasilkan deteksi terbaik.")
 
-            # ── Ringkasan pemenang ─────────────────
             st.divider()
             best_res = results[best_name]
             st.markdown(
                 f"### 🏆 Model Terbaik: **{best_name}**\n"
                 f"Confidence rata-rata **{best_res['avg_conf']:.1f}%** "
-                f"dengan **{best_res['n_det']}** objek terdeteksi — "
-                f"skor tertinggi di antara model yang dipilih."
+                f"dengan **{best_res['n_det']}** objek terdeteksi."
             )
 
         st.success("✅ Deteksi selesai!")
