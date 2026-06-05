@@ -8,7 +8,7 @@ import numpy as np
 st.set_page_config(page_title="Deteksi Helm Proyek", page_icon="🛡️", layout="wide")
 
 MODEL_CONFIG = {
-    "YoloV8": {"filename": "best8.pt", "url": "https://github.com/NysaSetiawan/AppDeploymentSafetyHelmet/releases/tag/yolov8"},
+    "YoloV8": {"filename": "best8.pt", "url": "https://github.com/NysaSetiawan/AppDeploymentSafetyHelmet/releases/download/yolov8/best8.pt"},
     "YoloV11": {"filename": "best11.pt", "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best11.pt"},
     "YoloV12": {"filename": "best12.pt", "url": "https://raw.githubusercontent.com/NysaSetiawan/AppDeploymentSafetyHelmet/main/best12.pt"},
 }
